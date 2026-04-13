@@ -1,8 +1,11 @@
 const express = require('express');
+const cors = require('cors');
 const PORT = 3000;
 const app = express();
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+
+app.use(cors());
 
 // Middleware to parse JSON data sent from frontend
 app.use(express.json());
@@ -18,7 +21,7 @@ const pool = new Pool({
 
 // POST Route
 app.post('/api/rides', async(req, res) => {
-    const { host_user_id, source_lat, source_lng, dest_lat, dest_lng, datetime, price, seats_available } = req.body;
+    const { host_user_id, source_lat, source_lng, destination_lat, destination_lng, datetime, price, seats_available } = req.body;
     try {
         const query = `
             INSERT INTO rides (host_user_id, source_location, destination_location, date_time, price, seats_available)
@@ -28,7 +31,7 @@ app.post('/api/rides', async(req, res) => {
                     $6, $7, $8)
             RETURNING *;
         `;
-        const values = [host_user_id, source_lat, source_lng, dest_lat, dest_lng, datetime, price, seats_available];
+        const values = [host_user_id, source_lat, source_lng, destination_lat, destination_lng, datetime, price, seats_available];
         const result = await pool.query(query, values);
 
         res.status(201).json({
