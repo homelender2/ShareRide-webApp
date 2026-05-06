@@ -45,41 +45,42 @@ app.post('/api/rides', async(req, res) => {
 });
 
 app.get('/api/rides/search', async (req, res) => {
-    // 1. Get user location and radius from the URL parameter
-    // example: api/rides/search?lat=40.7306&lng=73.0352&radius=5000
-    const {lat, lng, radius} = req.query;
+    // 1. Get all 4 coordinates and 2 radii from the URL
+    const { sLat, sLng, sRad, dLat, dLng, dRad } = req.query;
 
-    if (!lat || !lng || !radius) {
-        return res.status(400).json({ error: "Please provide lat, lng and radius "});
+    if (!sLat || !sLng || !dLat || !dLng) {
+        return res.status(400).json({ error: "Missing required coordinates" });
     }
 
     try {
         const query = `
-            SELECT
+            SELECT 
                 id, host_user_id, price, seats_available, date_time,
                 ST_AsGeoJSON(source_location)::json AS source,
                 ST_AsGeoJSON(destination_location)::json AS destination,
-                -- Calculate actual distance in meters for the users to see
-                ST_Distance(source_location, ST_MakePoint($2, $1)::geography) AS distance_meters
+                -- Distance from user's START to ride's START
+                ST_Distance(source_location, ST_MakePoint($2, $1)::geography) AS pickup_distance
             FROM rides
-            WHERE ST_DWithin(
-                source_location,
-                ST_MakePoint($2, $1)::geography,
-                $3
-            )
-            ORDER BY distance_meters ASC;
+            WHERE 
+                -- Check if Pickup is within User's Source Radius
+                ST_DWithin(source_location, ST_MakePoint($2, $1)::geography, $3)
+                AND 
+                -- Check if Drop-off is within User's Destination Radius
+                ST_DWithin(destination_location, ST_MakePoint($5, $4)::geography, $6)
+            ORDER BY pickup_distance ASC;
         `;
         
-        const values = [lat, lng, radius];
+        // $1: sLat, $2: sLng, $3: sRad (Source Radius)
+        // $4: dLat, $5: dLng, $6: dRad (Dest Radius)
+        const values = [sLat, sLng, sRad || 500, dLat, dLng, dRad || 1000];
         const result = await pool.query(query, values);
 
         res.json({
             results_count: result.rows.length,
             rides: result.rows
         });
-
     } catch(err) {
-        console.error("Search Error: ", err);
+        console.error("Dual-Radius Search Error: ", err);
         res.status(500).json({ error: "Database search failed" });
     }
 });
